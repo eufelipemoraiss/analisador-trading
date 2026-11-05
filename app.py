@@ -111,7 +111,7 @@ uploaded_file = st.file_uploader(
 )
 
 # ============================================================
-# FUNÇÃO DE ANÁLISE COM LISTAGEM DINÂMICA DE MODELOS
+# FUNÇÃO DE ANÁLISE COM FALLBACK DE MODELOS MULTIMODAIS
 # ============================================================
 def analisar_grafico(image, ativo, timeframe, estrategia, api_key):
     client = genai.Client(api_key=api_key)
@@ -142,39 +142,20 @@ Responda EXATAMENTE neste formato (em português):
 Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subir ou descer". Escolha um lado com base na técnica.
 """
     
-    # 1º - Tenta descobrir os modelos disponíveis na conta dinamicamente
-    modelos_para_tentar = []
-    try:
-        for m in client.models.list():
-            nome = m.name  # vem como "models/gemini-..." ou "gemini-..."
-            nome_limpo = nome.replace("models/", "").strip()
-            if "gemini" in nome_limpo.lower():
-                modelos_para_tentar.append(nome_limpo)
-    except Exception:
-        pass
-    
-    # 2º - Se não conseguiu listar, usa fallback manual expandido
-    if not modelos_para_tentar:
-        modelos_para_tentar = [
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash-001",
-            "gemini-1.5-flash-8b",
-            "gemini-1.5-flash-8b-latest",
-            "gemini-1.5-pro",
-            "gemini-1.5-pro-latest",
-            "gemini-1.5-pro-001",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-latest",
-            "gemini-2.0-flash-lite",
-            "gemini-3.8-flash",
-            "gemini-3.8-flash-latest",
-            "gemini-3.8-flash-001"
-        ]
+    # Modelos que COM CERTEZA aceitam entrada de imagem (multimodais)
+    modelos = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-latest",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-latest",
+        "gemini-2.0-flash-exp",
+    ]
     
     ultimo_erro = ""
     
-    for modelo in modelos_para_tentar:
+    for modelo in modelos:
         try:
             response = client.models.generate_content(
                 model=modelo,
@@ -184,18 +165,27 @@ Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subi
         except Exception as e:
             ultimo_erro = str(e)
             erro_lower = ultimo_erro.lower()
-            # Se for indisponível ou não encontrado, tenta o próximo
-            if any(x in erro_lower for x in ["503", "404", "not_found", "unavailable", "high demand", "is not found"]):
+            
+            # Se for indisponível, não encontrado ou NÃO ACEITAR IMAGEM, tenta o próximo
+            if any(x in erro_lower for x in [
+                "503", "404", "not_found", "unavailable", "high demand", 
+                "is not found", "invalid_argument", "modality", "not enabled"
+            ]):
                 continue
-            # Se for erro de API key, quota ou formato, para imediatamente
+            
+            # Erro de API Key, quota ou formato: para imediatamente
             break
     
     # Se chegou aqui, todos falharam
-    if "503" in ultimo_erro or "unavailable" in ultimo_erro.lower() or "high demand" in ultimo_erro.lower():
+    if "503" in ultimo_erro or "unavailable" in ultimo_erro.lower():
         raise Exception(
             "O Google Gemini está temporariamente sobrecarregado (erro 503) para todos os modelos disponíveis. "
-            "Isso é um problema do lado da Google. Aguarde alguns minutos e tente novamente. "
-            "Se persistir por horas, tente gerar uma nova API Key em outro projeto do Google Cloud."
+            "Aguarde alguns minutos e tente novamente."
+        )
+    elif "invalid_argument" in ultimo_erro.lower() or "modality" in ultimo_erro.lower():
+        raise Exception(
+            "Nenhum dos modelos disponíveis aceita análise de imagem no momento. "
+            "Verifique se sua API Key tem acesso aos modelos multimodais do Gemini."
         )
     else:
         raise Exception(f"Todos os modelos falharam. Último erro: {ultimo_erro}")
@@ -239,6 +229,8 @@ if uploaded_file is not None:
                 except Exception as e:
                     st.error(f"Erro na análise: {str(e)}")
                     if "503" in str(e):
-                        st.info("💡 A Google está com alta demanda no momento. Espere 2-5 minutos e clique em Analisar novamente.")
+                        st.info("💡 A Google está com alta demanda no momento. Espere 2-5 minutos e tente novamente.")
+                    elif "multimodais" in str(e).lower():
+                        st.info("💡 Sua API Key pode não ter acesso aos modelos com visão. Acesse Google AI Studio e ative o Gemini.")
                     else:
                         st.info("Dica: Verifique se sua API Key está ativa e se o arquivo de imagem não está corrompido.")
