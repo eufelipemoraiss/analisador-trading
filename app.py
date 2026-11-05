@@ -143,7 +143,7 @@ Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subi
 """
     
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash",
         contents=[prompt, image]
     )
     return response.text
