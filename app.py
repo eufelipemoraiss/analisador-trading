@@ -52,7 +52,7 @@ with st.sidebar:
     api_key = st.text_input(
         "🔑 Google Gemini API Key", 
         type="password",
-        help="Obtenha gratuitamente em: makersuite.google.com/app/apikey"
+        help="Obtenha gratuitamente em: aistudio.google.com/app/apikey"
     )
     
     if api_key:
@@ -111,7 +111,7 @@ uploaded_file = st.file_uploader(
 )
 
 # ============================================================
-# FUNÇÃO DE ANÁLISE COM FALLBACK
+# FUNÇÃO DE ANÁLISE COM LISTAGEM DINÂMICA DE MODELOS
 # ============================================================
 def analisar_grafico(image, ativo, timeframe, estrategia, api_key):
     client = genai.Client(api_key=api_key)
@@ -142,11 +142,39 @@ Responda EXATAMENTE neste formato (em português):
 Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subir ou descer". Escolha um lado com base na técnica.
 """
     
-    # Fallback: tenta modelos em ordem até um funcionar
-    modelos = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-3.8-flash"]
+    # 1º - Tenta descobrir os modelos disponíveis na conta dinamicamente
+    modelos_para_tentar = []
+    try:
+        for m in client.models.list():
+            nome = m.name  # vem como "models/gemini-..." ou "gemini-..."
+            nome_limpo = nome.replace("models/", "").strip()
+            if "gemini" in nome_limpo.lower():
+                modelos_para_tentar.append(nome_limpo)
+    except Exception:
+        pass
+    
+    # 2º - Se não conseguiu listar, usa fallback manual expandido
+    if not modelos_para_tentar:
+        modelos_para_tentar = [
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash-001",
+            "gemini-1.5-flash-8b",
+            "gemini-1.5-flash-8b-latest",
+            "gemini-1.5-pro",
+            "gemini-1.5-pro-latest",
+            "gemini-1.5-pro-001",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-latest",
+            "gemini-2.0-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.8-flash-latest",
+            "gemini-3.8-flash-001"
+        ]
+    
     ultimo_erro = ""
     
-    for modelo in modelos:
+    for modelo in modelos_para_tentar:
         try:
             response = client.models.generate_content(
                 model=modelo,
@@ -155,13 +183,22 @@ Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subi
             return response.text
         except Exception as e:
             ultimo_erro = str(e)
-            # Se for erro de modelo não encontrado ou indisponível, tenta o próximo
-            if any(x in ultimo_erro for x in ["503", "404", "NOT_FOUND", "UNAVAILABLE"]):
+            erro_lower = ultimo_erro.lower()
+            # Se for indisponível ou não encontrado, tenta o próximo
+            if any(x in erro_lower for x in ["503", "404", "not_found", "unavailable", "high demand", "is not found"]):
                 continue
-            # Se for erro de API Key ou de formato, para imediatamente
+            # Se for erro de API key, quota ou formato, para imediatamente
             break
     
-    raise Exception(f"Todos os modelos falharam. Último erro: {ultimo_erro}")
+    # Se chegou aqui, todos falharam
+    if "503" in ultimo_erro or "unavailable" in ultimo_erro.lower() or "high demand" in ultimo_erro.lower():
+        raise Exception(
+            "O Google Gemini está temporariamente sobrecarregado (erro 503) para todos os modelos disponíveis. "
+            "Isso é um problema do lado da Google. Aguarde alguns minutos e tente novamente. "
+            "Se persistir por horas, tente gerar uma nova API Key em outro projeto do Google Cloud."
+        )
+    else:
+        raise Exception(f"Todos os modelos falharam. Último erro: {ultimo_erro}")
 
 # ============================================================
 # BOTÃO DE ANÁLISE
@@ -184,7 +221,6 @@ if uploaded_file is not None:
                     with st.container():
                         st.markdown('<div class="result-box">', unsafe_allow_html=True)
                         
-                        # Detecta a direção para colorir
                         resultado_upper = resultado.upper()
                         idx_call = resultado_upper.find("CALL")
                         idx_put = resultado_upper.find("PUT")
@@ -202,4 +238,7 @@ if uploaded_file is not None:
                         
                 except Exception as e:
                     st.error(f"Erro na análise: {str(e)}")
-                    st.info("Dica: Verifique se sua API Key está ativa e se o arquivo de imagem não está corrompido.")
+                    if "503" in str(e):
+                        st.info("💡 A Google está com alta demanda no momento. Espere 2-5 minutos e clique em Analisar novamente.")
+                    else:
+                        st.info("Dica: Verifique se sua API Key está ativa e se o arquivo de imagem não está corrompido.")
