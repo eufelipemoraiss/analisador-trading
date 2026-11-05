@@ -118,7 +118,8 @@ uploaded_file = st.file_uploader(
 # ============================================================
 def analisar_grafico(image, ativo, timeframe, estrategia, api_key):
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+
     
     prompt = f"""Você é um analista técnico profissional com 15 anos de experiência em day trade, swing trade e opções binárias. 
     
