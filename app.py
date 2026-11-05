@@ -111,7 +111,7 @@ uploaded_file = st.file_uploader(
 )
 
 # ============================================================
-# FUNÇÃO DE ANÁLISE
+# FUNÇÃO DE ANÁLISE COM FALLBACK
 # ============================================================
 def analisar_grafico(image, ativo, timeframe, estrategia, api_key):
     client = genai.Client(api_key=api_key)
@@ -142,11 +142,26 @@ Responda EXATAMENTE neste formato (em português):
 Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subir ou descer". Escolha um lado com base na técnica.
 """
     
-    response = client.models.generate_content(
-        model="gemini-3.8-flash",
-        contents=[prompt, image]
-    )
-    return response.text
+    # Fallback: tenta modelos em ordem até um funcionar
+    modelos = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-3.8-flash"]
+    ultimo_erro = ""
+    
+    for modelo in modelos:
+        try:
+            response = client.models.generate_content(
+                model=modelo,
+                contents=[prompt, image]
+            )
+            return response.text
+        except Exception as e:
+            ultimo_erro = str(e)
+            # Se for erro de modelo não encontrado ou indisponível, tenta o próximo
+            if any(x in ultimo_erro for x in ["503", "404", "NOT_FOUND", "UNAVAILABLE"]):
+                continue
+            # Se for erro de API Key ou de formato, para imediatamente
+            break
+    
+    raise Exception(f"Todos os modelos falharam. Último erro: {ultimo_erro}")
 
 # ============================================================
 # BOTÃO DE ANÁLISE
