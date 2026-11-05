@@ -193,3 +193,4 @@ if uploaded_file is not None:
                 except Exception as e:
                     st.error(f"Erro na análise: {str(e)}")
                     st.info("Dica: Verifique se sua API Key está ativa e se o arquivo de imagem não está corrompido.")
+# reboot
