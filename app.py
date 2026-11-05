@@ -1,6 +1,6 @@
-import streamlit as st
+
 from PIL import Image
-import google.generativeai as genai
+from google import genai
 
 # ============================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -39,15 +39,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# API KEY (Streamlit Secrets ou Input Manual)
+# API KEY (Cada usuário usa a sua própria)
 # ============================================================
-try:
-    # Tenta pegar do Streamlit Cloud Secrets
-    api_key = st.secrets["GOOGLE_API_KEY"]
-    secrets_enabled = True
-except Exception:
-    api_key = None
-    secrets_enabled = False
+api_key = None
 
 # ============================================================
 # BARRA LATERAL
@@ -55,14 +49,16 @@ except Exception:
 with st.sidebar:
     st.title("⚙️ Configurações")
     
-    if not secrets_enabled:
-        api_key = st.text_input(
-            "🔑 Google Gemini API Key", 
-            type="password",
-            help="Obtenha gratuitamente em: makersuite.google.com/app/apikey"
-        )
+    api_key = st.text_input(
+        "🔑 Google Gemini API Key", 
+        type="password",
+        help="Obtenha gratuitamente em: makersuite.google.com/app/apikey"
+    )
+    
+    if api_key:
+        st.success("🔐 API Key configurada")
     else:
-        st.success("🔐 API Key carregada via Secrets")
+        st.warning("⚠️ Insira sua API Key acima")
     
     st.divider()
     st.markdown("""
@@ -79,6 +75,7 @@ with st.sidebar:
     
     st.divider()
     st.caption("Desenvolvido para análise técnica educacional")
+    st.caption("Cada usuário utiliza sua própria API Key")
 
 # ============================================================
 # TÍTULO PRINCIPAL
@@ -117,10 +114,7 @@ uploaded_file = st.file_uploader(
 # FUNÇÃO DE ANÁLISE
 # ============================================================
 def analisar_grafico(image, ativo, timeframe, estrategia, api_key):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro')
-
-
+    client = genai.Client(api_key=api_key)
     
     prompt = f"""Você é um analista técnico profissional com 15 anos de experiência em day trade, swing trade e opções binárias. 
     
@@ -148,7 +142,10 @@ Responda EXATAMENTE neste formato (em português):
 Seja direto, técnico e objetivo. Não use linguagem duvidosa do tipo "pode subir ou descer". Escolha um lado com base na técnica.
 """
     
-    response = model.generate_content([prompt, image])
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=[prompt, image]
+    )
     return response.text
 
 # ============================================================
@@ -161,10 +158,7 @@ if uploaded_file is not None:
     if st.button("🚀 ANALISAR GRÁFICO"):
         if not api_key:
             st.error("❌ API Key não configurada!")
-            if secrets_enabled:
-                st.info("Configure a secret GOOGLE_API_KEY no painel do Streamlit Cloud.")
-            else:
-                st.info("👉 Insira sua API Key na barra lateral ou configure via Secrets.")
+            st.info("👉 Insira sua API Key na barra lateral.")
         else:
             with st.spinner("🔍 Analisando padrões, suportes, resistências e indicadores... Aguarde."):
                 try:
@@ -194,4 +188,3 @@ if uploaded_file is not None:
                 except Exception as e:
                     st.error(f"Erro na análise: {str(e)}")
                     st.info("Dica: Verifique se sua API Key está ativa e se o arquivo de imagem não está corrompido.")
-# reboot
